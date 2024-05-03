@@ -1,0 +1,55 @@
+import os
+import feedparser
+from openai import OpenAI
+from dotenv import load_dotenv
+import time
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Setup OpenAI client with API Key from environment
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# Function to parse RSS and fetch articles
+def fetch_articles(rss_url):
+    feed = feedparser.parse(rss_url)
+    # Select only the first 5 articles from the feed entries
+    articles = [{'title': entry.title, 'summary': entry.summary, 'link': entry.link} for entry in feed.entries[:10]]
+    return articles
+
+# Function to generate a summary of the articles
+def generate_summary(articles):
+    all_summaries = ' '.join([article['summary'] for article in articles])
+    prompt = ("Please summarize the following articles, focusing on the details related to each country. "
+              "Group and combine the summaries by the country involved by their geographic region: \n\n" + all_summaries)
+    
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="gpt-3.5-turbo",  # Replace with your model of choice.
+            )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        print("An error occurred: ", e)
+        # Implement exponential backoff retry strategy here
+        # ...
+
+# Function to save the synopsis to a text file
+def save_synopsis(synopsis):
+    with open('daily_synopsis.txt', 'w') as file:
+        file.write(synopsis)
+
+def main():
+    rss_url = 'https://www.globalsecurity.org/globalsecurity-org.xml'
+    articles = fetch_articles(rss_url)
+    
+    if articles:
+        synopsis = generate_summary(articles)
+        if synopsis:
+            print(synopsis)
+            save_synopsis(synopsis)
+    else:
+        print("No articles found.")
+
+if __name__ == "__main__":
+    main()
